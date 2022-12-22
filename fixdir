@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+import os, re, sys
+from pathlib import Path
+
+USAGE = "usage: fixdir <dir> <old_format> <new_format> [-f]"
+HELP = "fixdir: fix directory naming\n" \
+"Pass in the directory, the old name format, and the new name format. Old format should be the current format of the filenames, with parts you want to capture replaced with {}. These are like unnamed capture groups in regex (zero-indexed). New format should be the new name of the file, with the order of the capture groups specified. You can preview some of the names before they are changed unless you use -f (force).\n\n" \
+"Example: editing a folder full of TV episodes:\n" \
+"- \"The.Sopranos.S1E01.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\"\n" \
+"- \"The.Sopranos.S1E02.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\"\n" \
+"- \"The.Sopranos.S1E03.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\"\n" \
+"...\n" \
+"Pass in these arguments:\n" \
+"dir - ./\n" \
+"old_format - \"The.Sopranos.S{}E{}.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\"\n" \
+"new_format - \"The Sopranos: {0}.{1}.mkv\"\n" \
+"Output:\n" \
+"- \"The Sopranos: 1.01.mkv\"\n" \
+"- \"The Sopranos: 1.02.mkv\"\n" \
+"- \"The Sopranos: 1.03.mkv\"\n" \
+"...\n" \
+
+token_regex = re.compile(r'{}')
+ref_regex = re.compile(r'{\d+}')
+
+def get_mappings(name: str, fmt: str) -> tuple[str]:
+    mapping_str = token_regex.sub(r'(.+?)', fmt)
+    mapping_regex = re.compile(mapping_str)
+    match = mapping_regex.fullmatch(name)
+    return match.groups() if match else ()
+
+def new_file_name(old_name: str, old_fmt: str, new_fmt: str) -> str:
+    mappings = get_mappings(old_name, old_fmt) # ('2', '02')
+    new_name = str(new_fmt)
+    for i, m in enumerate(mappings):
+        new_name = new_name.replace('{%d}'%i, m)
+    return new_name
+
+def rename_file(dir: str, old_name: str, old_fmt: str, new_fmt: str, change: bool = False) -> str:
+    dir_path = Path(dir)
+    new_name = new_file_name(old_name, old_fmt, new_fmt)
+    if (change):
+        os.rename(dir_path/old_name, dir_path/new_name)
+    return new_name
+
+def rename_dir(dir: str, old_fmt: str, new_fmt: str, change: bool = False) -> list[str]:
+    return [rename_file(dir, f, old_fmt, new_fmt, change=change) for f in os.listdir(dir)]
+
+# print any errors that occurred
+def args_valid(dir: str, old_fmt: str, new_fmt: str) -> bool:
+    # does dir exist?
+    if not os.path.exists(dir):
+        print(f"error: dir {dir} does not exist")
+        return False
+
+    # does old_fmt match anything in dir?
+    token_finder: str = old_fmt.replace('{}', '.+')
+    tokens_in = lambda file: re.match(token_finder, file)
+    if not any(tokens_in(f) for f in os.listdir(dir)):
+        print(f"warning: old format (\"{old_fmt}\") doesn't match any files in {dir}, exiting")
+        return False
+
+    # does new_fmt reference any groups not defined in old_fmt?
+    group_count: int = old_fmt.count('{}')
+    # highest referenced group in new_fmt
+    highest_group: int = max(int(x) for x in re.findall(r'{(\d+)}', new_fmt))
+    if highest_group + 1 > group_count:
+        print(f"error: group index {highest_group} out of bounds (old format has {group_count} groups)")
+        return False
+
+    return True
+
+def show_output(dir: str, old_fmt: str, new_fmt: str):
+    new_names = rename_dir(dir, old_fmt, new_fmt, False)
+    first_20 = '\n'.join(n for n in sorted(new_names)[:20])
+    print('File names will be changed to:')
+    print(first_20)
+    print('(only 20 shown)')
+    i = input('Is this ok? y/n\n')
+    while i[:1].lower() not in 'yn':
+        print('Input not recognized. ', end='')
+        i = input('Is this ok? y\n')
+    if i == 'y':
+        rename_dir(dir, old_fmt, new_fmt, True)
+        print('Done')
+    else:
+        print('Ok, cancelled')
+
+def main() -> None:
+    match sys.argv[1:]:
+        case ["help"]:
+            print(HELP)
+        case [dir, old, new]:
+            if args_valid(dir, old, new):
+                show_output(dir, old, new)
+        case [dir, old, new, "-f"]:
+                rename_dir(dir, old, new)
+        case x if len(x) not in (3, 4):
+            print(USAGE)
+
+if __name__ == '__main__':
+    main()
