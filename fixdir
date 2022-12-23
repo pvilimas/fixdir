@@ -2,6 +2,11 @@
 import os, re, sys
 from pathlib import Path
 
+# How to install
+# 1. chmod +x fixdir
+# 2. Add to PATH: put export PATH=/path/to/script:$PATH at the end of .bashrc or .zshrc
+# 3. Restart terminal
+
 USAGE = "usage: fixdir <dir> <old_format> <new_format> [-f]"
 HELP = "fixdir: fix directory naming\n" \
 "Pass in the directory, the old name format, and the new name format. Old format should be the current format of the filenames, with parts you want to capture replaced with {}. These are like unnamed capture groups in regex (zero-indexed). New format should be the new name of the file, with the order of the capture groups specified. You can preview some of the names before they are changed unless you use -f (force).\n\n" \
